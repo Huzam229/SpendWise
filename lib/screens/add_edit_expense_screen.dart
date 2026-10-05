@@ -41,8 +41,13 @@ class _AddEditExpenseScreenState extends ConsumerState<AddEditExpenseScreen> {
     );
     _noteController = TextEditingController(text: existing?.note ?? '');
     _isIncome = existing?.isIncome ?? false;
-    _category = existing?.category ?? kCategories.first.name;
     _date = existing?.date ?? DateTime.now();
+
+    final available = categoriesFor(isIncome: _isIncome);
+    final existingCategory = existing?.category;
+    _category = available.any((c) => c.name == existingCategory)
+        ? existingCategory!
+        : available.first.name;
   }
 
   @override
@@ -51,6 +56,17 @@ class _AddEditExpenseScreenState extends ConsumerState<AddEditExpenseScreen> {
     _amountController.dispose();
     _noteController.dispose();
     super.dispose();
+  }
+
+  void _setType(bool isIncome) {
+    if (_isIncome == isIncome) return;
+    final nextCategories = categoriesFor(isIncome: isIncome);
+    setState(() {
+      _isIncome = isIncome;
+      if (!nextCategories.any((c) => c.name == _category)) {
+        _category = nextCategories.first.name;
+      }
+    });
   }
 
   Future<void> _pickDate() async {
@@ -117,11 +133,20 @@ class _AddEditExpenseScreenState extends ConsumerState<AddEditExpenseScreen> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final accent = _isIncome
+        ? (isDark ? const Color(0xFF81C784) : const Color(0xFF2E7D32))
+        : (isDark ? const Color(0xFFE57373) : const Color(0xFFC62828));
+    final availableCategories = categoriesFor(isIncome: _isIncome);
 
     return Scaffold(
       backgroundColor: scheme.surface,
       appBar: AppBar(
-        title: Text(widget.isEditing ? 'Edit transaction' : 'Add transaction'),
+        title: Text(
+          widget.isEditing
+              ? (_isIncome ? 'Edit income' : 'Edit expense')
+              : (_isIncome ? 'Add income' : 'Add expense'),
+        ),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
           child: Divider(
@@ -134,8 +159,63 @@ class _AddEditExpenseScreenState extends ConsumerState<AddEditExpenseScreen> {
         child: Form(
           key: _formKey,
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 120),
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 120),
             children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: isDark ? 0.16 : 0.10),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: accent.withValues(alpha: 0.28)),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: accent.withValues(alpha: 0.18),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Icon(
+                        _isIncome
+                            ? Icons.south_west_rounded
+                            : Icons.north_east_rounded,
+                        color: accent,
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _isIncome ? 'Money in' : 'Money out',
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleMedium
+                                ?.copyWith(
+                                  fontWeight: FontWeight.w800,
+                                  color: accent,
+                                ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            _isIncome
+                                ? 'Salary, gifts, freelance, and other income'
+                                : 'Food, bills, shopping, and daily spending',
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.copyWith(color: scheme.onSurfaceVariant),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 18),
               Text(
                 'Type',
                 style: Theme.of(context).textTheme.titleSmall?.copyWith(
@@ -148,18 +228,16 @@ class _AddEditExpenseScreenState extends ConsumerState<AddEditExpenseScreen> {
                   ButtonSegment(
                     value: false,
                     label: Text('Expense'),
-                    icon: Icon(Icons.arrow_upward_rounded),
+                    icon: Icon(Icons.north_east_rounded),
                   ),
                   ButtonSegment(
                     value: true,
                     label: Text('Income'),
-                    icon: Icon(Icons.arrow_downward_rounded),
+                    icon: Icon(Icons.south_west_rounded),
                   ),
                 ],
                 selected: {_isIncome},
-                onSelectionChanged: (values) {
-                  setState(() => _isIncome = values.first);
-                },
+                onSelectionChanged: (values) => _setType(values.first),
               ),
               const SizedBox(height: 20),
               TextFormField(
@@ -168,7 +246,7 @@ class _AddEditExpenseScreenState extends ConsumerState<AddEditExpenseScreen> {
                 textInputAction: TextInputAction.next,
                 decoration: _decoration(
                   label: 'Title',
-                  hint: 'e.g. Grocery run',
+                  hint: _isIncome ? 'e.g. October salary' : 'e.g. Grocery run',
                   prefixIcon: const Icon(Icons.edit_outlined),
                 ),
                 validator: (value) {
@@ -189,9 +267,14 @@ class _AddEditExpenseScreenState extends ConsumerState<AddEditExpenseScreen> {
                 ],
                 textInputAction: TextInputAction.next,
                 decoration: _decoration(
-                  label: 'Amount',
+                  label: _isIncome ? 'Income amount' : 'Expense amount',
                   hint: '0.00',
-                  prefixIcon: const Icon(Icons.attach_money_rounded),
+                  prefixIcon: Icon(
+                    _isIncome
+                        ? Icons.add_card_rounded
+                        : Icons.money_off_csred_rounded,
+                    color: accent,
+                  ),
                 ),
                 validator: (value) {
                   if (value == null || value.trim().isEmpty) {
@@ -209,12 +292,13 @@ class _AddEditExpenseScreenState extends ConsumerState<AddEditExpenseScreen> {
               ),
               const SizedBox(height: 14),
               DropdownButtonFormField<String>(
+                key: ValueKey('category-$_isIncome-$_category'),
                 initialValue: _category,
                 decoration: _decoration(
-                  label: 'Category',
+                  label: _isIncome ? 'Income category' : 'Expense category',
                   prefixIcon: const Icon(Icons.category_outlined),
                 ),
-                items: kCategories
+                items: availableCategories
                     .map(
                       (category) => DropdownMenuItem(
                         value: category.name,
@@ -257,7 +341,9 @@ class _AddEditExpenseScreenState extends ConsumerState<AddEditExpenseScreen> {
                 textCapitalization: TextCapitalization.sentences,
                 decoration: _decoration(
                   label: 'Note (optional)',
-                  hint: 'Add a short note',
+                  hint: _isIncome
+                      ? 'Source, client, or payout details'
+                      : 'Store, bill period, or reason',
                   prefixIcon: const Icon(Icons.notes_rounded),
                 ),
               ),
@@ -273,19 +359,27 @@ class _AddEditExpenseScreenState extends ConsumerState<AddEditExpenseScreen> {
             child: FilledButton.icon(
               onPressed: _saving ? null : _save,
               icon: _saving
-                  ? SizedBox(
+                  ? const SizedBox(
                       width: 18,
                       height: 18,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        color: scheme.onPrimary,
+                        color: Colors.white,
                       ),
                     )
-                  : const Icon(Icons.check_rounded),
+                  : Icon(
+                      _isIncome
+                          ? Icons.add_rounded
+                          : Icons.check_rounded,
+                    ),
               label: Text(
-                widget.isEditing ? 'Save changes' : 'Save transaction',
+                widget.isEditing
+                    ? (_isIncome ? 'Save income' : 'Save expense')
+                    : (_isIncome ? 'Add income' : 'Add expense'),
               ),
               style: FilledButton.styleFrom(
+                backgroundColor: accent,
+                foregroundColor: Colors.white,
                 minimumSize: const Size.fromHeight(54),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16),
