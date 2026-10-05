@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'core/theme.dart';
 import 'screens/home_screen.dart';
 
 class SpendWiseApp extends StatelessWidget {
@@ -10,10 +11,9 @@ class SpendWiseApp extends StatelessWidget {
     return MaterialApp(
       title: 'SpendWise',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal),
-        useMaterial3: true,
-      ),
+      theme: lightTheme,
+      darkTheme: darkTheme,
+      themeMode: ThemeMode.system,
       home: const HomeScreen(),
     );
   }
