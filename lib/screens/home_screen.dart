@@ -8,6 +8,7 @@ import '../utils/formatters.dart';
 import '../widgets/expense_tile.dart';
 import '../widgets/summary_card.dart';
 import 'add_edit_expense_screen.dart';
+import 'stats_screen.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -69,6 +70,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       appBar: AppBar(
         title: const Text('SpendWise'),
         centerTitle: false,
+        actions: [
+          IconButton(
+            tooltip: 'Statistics',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const StatsScreen(),
+                ),
+              );
+            },
+            icon: const Icon(Icons.pie_chart_rounded),
+          ),
+        ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(64),
           child: Padding(
