@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../data/models/expense.dart';
 import '../providers/expense_provider.dart';
 import '../providers/filter_provider.dart';
 import '../utils/formatters.dart';
@@ -8,156 +9,193 @@ import '../widgets/expense_tile.dart';
 import '../widgets/summary_card.dart';
 import 'add_edit_expense_screen.dart';
 
-class HomeScreen extends ConsumerWidget {
+class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
-  void _shiftMonth(WidgetRef ref, int delta) {
+  @override
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends ConsumerState<HomeScreen> {
+  late final TextEditingController _searchController;
+
+  @override
+  void initState() {
+    super.initState();
+    _searchController =
+        TextEditingController(text: ref.read(searchTextProvider));
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _shiftMonth(int delta) {
     final current = ref.read(selectedMonthProvider);
     ref.read(selectedMonthProvider.notifier).state =
         DateTime(current.year, current.month + delta);
   }
 
+  Future<void> _deleteWithUndo(Expense item) async {
+    await ref.read(expenseProvider.notifier).remove(item.id);
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(
+        SnackBar(
+          content: Text('Deleted "${item.title}"'),
+          action: SnackBarAction(
+            label: 'Undo',
+            onPressed: () {
+              ref.read(expenseProvider.notifier).add(item);
+            },
+          ),
+        ),
+      );
+  }
+
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final month = ref.watch(selectedMonthProvider);
     final expensesAsync = ref.watch(expenseProvider);
+    final searchText = ref.watch(searchTextProvider);
 
     return Scaffold(
       backgroundColor: scheme.surface,
-      body: SafeArea(
-        child: expensesAsync.when(
-          loading: () => const _LoadingState(),
-          error: (error, _) => _ErrorState(
-            message: error.toString(),
-            onRetry: () => ref.invalidate(expenseProvider),
+      appBar: AppBar(
+        title: const Text('SpendWise'),
+        centerTitle: false,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(64),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: TextField(
+              controller: _searchController,
+              textInputAction: TextInputAction.search,
+              onChanged: (value) {
+                ref.read(searchTextProvider.notifier).state = value;
+              },
+              decoration: InputDecoration(
+                hintText: 'Search title, category, or note',
+                prefixIcon: const Icon(Icons.search_rounded),
+                suffixIcon: searchText.isEmpty
+                    ? null
+                    : IconButton(
+                        tooltip: 'Clear',
+                        onPressed: () {
+                          _searchController.clear();
+                          ref.read(searchTextProvider.notifier).state = '';
+                        },
+                        icon: const Icon(Icons.close_rounded),
+                      ),
+                filled: true,
+                fillColor:
+                    scheme.surfaceContainerHighest.withValues(alpha: 0.55),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
           ),
-          data: (_) {
-            final expenses = ref.watch(filteredExpensesProvider);
-            final balance = ref.watch(balanceProvider);
-            final income = ref.watch(totalIncomeProvider);
-            final expenseTotal = ref.watch(totalExpenseProvider);
+        ),
+      ),
+      body: expensesAsync.when(
+        loading: () => const _LoadingState(),
+        error: (error, _) => _ErrorState(
+          message: error.toString(),
+          onRetry: () => ref.invalidate(expenseProvider),
+        ),
+        data: (_) {
+          final expenses = ref.watch(filteredExpensesProvider);
+          final balance = ref.watch(balanceProvider);
+          final income = ref.watch(totalIncomeProvider);
+          final expenseTotal = ref.watch(totalExpenseProvider);
 
-            return CustomScrollView(
-              physics: const BouncingScrollPhysics(),
-              slivers: [
+          return CustomScrollView(
+            physics: const BouncingScrollPhysics(),
+            slivers: [
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                  child: _MonthSelector(
+                    label: monthYearFormat.format(month),
+                    onPrevious: () => _shiftMonth(-1),
+                    onNext: () => _shiftMonth(1),
+                  ),
+                ),
+              ),
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                  child: SummaryCard(
+                    balance: balance,
+                    income: income,
+                    expense: expenseTotal,
+                  ),
+                ),
+              ),
+              if (expenses.isEmpty)
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: _EmptyState(hasSearch: searchText.trim().isNotEmpty),
+                )
+              else ...[
                 SliverToBoxAdapter(
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 12, 12, 0),
+                    padding: const EdgeInsets.fromLTRB(20, 22, 20, 10),
                     child: Row(
                       children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'SpendWise',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .headlineSmall
-                                    ?.copyWith(fontWeight: FontWeight.w800),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                'Track where your money goes',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodyMedium
-                                    ?.copyWith(color: scheme.onSurfaceVariant),
-                              ),
-                            ],
-                          ),
+                        Text(
+                          'Transactions',
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w700),
                         ),
-                        IconButton.filledTonal(
-                          tooltip: 'Search',
-                          onPressed: () => _openSearch(context, ref),
-                          icon: const Icon(Icons.search_rounded),
+                        const Spacer(),
+                        Text(
+                          '${expenses.length}',
+                          style: Theme.of(context)
+                              .textTheme
+                              .labelLarge
+                              ?.copyWith(color: scheme.onSurfaceVariant),
                         ),
                       ],
                     ),
                   ),
                 ),
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-                    child: _MonthSelector(
-                      label: monthYearFormat.format(month),
-                      onPrevious: () => _shiftMonth(ref, -1),
-                      onNext: () => _shiftMonth(ref, 1),
-                    ),
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
+                  sliver: SliverList.separated(
+                    itemCount: expenses.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 10),
+                    itemBuilder: (context, index) {
+                      final item = expenses[index];
+                      return ExpenseTile(
+                        expense: item,
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) =>
+                                  AddEditExpenseScreen(expense: item),
+                            ),
+                          );
+                        },
+                        onDismissed: () => _deleteWithUndo(item),
+                      );
+                    },
                   ),
                 ),
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-                    child: SummaryCard(
-                      balance: balance,
-                      income: income,
-                      expense: expenseTotal,
-                    ),
-                  ),
-                ),
-                if (expenses.isEmpty)
-                  const SliverFillRemaining(
-                    hasScrollBody: false,
-                    child: _EmptyState(),
-                  )
-                else ...[
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 22, 20, 10),
-                      child: Row(
-                        children: [
-                          Text(
-                            'Transactions',
-                            style: Theme.of(context)
-                                .textTheme
-                                .titleMedium
-                                ?.copyWith(fontWeight: FontWeight.w700),
-                          ),
-                          const Spacer(),
-                          Text(
-                            '${expenses.length}',
-                            style: Theme.of(context)
-                                .textTheme
-                                .labelLarge
-                                ?.copyWith(color: scheme.onSurfaceVariant),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
-                    sliver: SliverList.separated(
-                      itemCount: expenses.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 10),
-                      itemBuilder: (context, index) {
-                        final item = expenses[index];
-                        return ExpenseTile(
-                          expense: item,
-                          onTap: () {
-                            Navigator.of(context).push(
-                              MaterialPageRoute<void>(
-                                builder: (_) =>
-                                    AddEditExpenseScreen(expense: item),
-                              ),
-                            );
-                          },
-                          onDismissed: () async {
-                            await ref
-                                .read(expenseProvider.notifier)
-                                .remove(item.id);
-                          },
-                        );
-                      },
-                    ),
-                  ),
-                ],
               ],
-            );
-          },
-        ),
+            ],
+          );
+        },
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () {
@@ -171,63 +209,6 @@ class HomeScreen extends ConsumerWidget {
         label: const Text('Add'),
       ),
     );
-  }
-
-  Future<void> _openSearch(BuildContext context, WidgetRef ref) async {
-    final controller =
-        TextEditingController(text: ref.read(searchTextProvider));
-    final query = await showModalBottomSheet<String>(
-      context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      builder: (context) {
-        return Padding(
-          padding: EdgeInsets.only(
-            left: 20,
-            right: 20,
-            top: 8,
-            bottom: MediaQuery.viewInsetsOf(context).bottom + 20,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                'Search transactions',
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-              ),
-              const SizedBox(height: 14),
-              TextField(
-                controller: controller,
-                autofocus: true,
-                textInputAction: TextInputAction.search,
-                decoration: InputDecoration(
-                  hintText: 'Title, category, or note',
-                  prefixIcon: const Icon(Icons.search_rounded),
-                  filled: true,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    borderSide: BorderSide.none,
-                  ),
-                ),
-                onSubmitted: (value) => Navigator.pop(context, value),
-              ),
-              const SizedBox(height: 12),
-              FilledButton(
-                onPressed: () => Navigator.pop(context, controller.text),
-                child: const Text('Apply'),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-
-    if (query != null) {
-      ref.read(searchTextProvider.notifier).state = query;
-    }
   }
 }
 
@@ -342,7 +323,9 @@ class _ErrorState extends StatelessWidget {
 }
 
 class _EmptyState extends StatelessWidget {
-  const _EmptyState();
+  const _EmptyState({required this.hasSearch});
+
+  final bool hasSearch;
 
   @override
   Widget build(BuildContext context) {
@@ -361,21 +344,23 @@ class _EmptyState extends StatelessWidget {
               shape: BoxShape.circle,
             ),
             child: Icon(
-              Icons.receipt_long_rounded,
+              hasSearch ? Icons.search_off_rounded : Icons.receipt_long_rounded,
               size: 40,
               color: scheme.primary,
             ),
           ),
           const SizedBox(height: 18),
           Text(
-            'No transactions yet',
+            hasSearch ? 'No matches found' : 'No transactions yet',
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.w700,
                 ),
           ),
           const SizedBox(height: 8),
           Text(
-            'Add your first income or expense to start tracking this month.',
+            hasSearch
+                ? 'Try a different search term for this month.'
+                : 'Add your first income or expense to start tracking this month.',
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: scheme.onSurfaceVariant,
