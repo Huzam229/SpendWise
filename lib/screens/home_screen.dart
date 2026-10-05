@@ -6,6 +6,7 @@ import '../providers/filter_provider.dart';
 import '../utils/formatters.dart';
 import '../widgets/expense_tile.dart';
 import '../widgets/summary_card.dart';
+import 'add_edit_expense_screen.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -135,6 +136,14 @@ class HomeScreen extends ConsumerWidget {
                         final item = expenses[index];
                         return ExpenseTile(
                           expense: item,
+                          onTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                builder: (_) =>
+                                    AddEditExpenseScreen(expense: item),
+                              ),
+                            );
+                          },
                           onDismissed: () async {
                             await ref
                                 .read(expenseProvider.notifier)
@@ -152,8 +161,10 @@ class HomeScreen extends ConsumerWidget {
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Add expense screen coming next')),
+          Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => const AddEditExpenseScreen(),
+            ),
           );
         },
         icon: const Icon(Icons.add_rounded),
