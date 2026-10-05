@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/models/expense.dart';
 import '../providers/expense_provider.dart';
 import '../providers/filter_provider.dart';
+import '../utils/csv_exporter.dart';
 import '../utils/formatters.dart';
 import '../widgets/expense_tile.dart';
 import '../widgets/summary_card.dart';
@@ -58,6 +59,25 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       );
   }
 
+  Future<void> _exportCsv() async {
+    final items = ref.read(filteredExpensesProvider);
+    if (items.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Nothing to export for this view')),
+      );
+      return;
+    }
+
+    try {
+      await exportCsv(items);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Export failed: $e')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -71,6 +91,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         title: const Text('SpendWise'),
         centerTitle: false,
         actions: [
+          IconButton(
+            tooltip: 'Export CSV',
+            onPressed: _exportCsv,
+            icon: const Icon(Icons.ios_share_rounded),
+          ),
           IconButton(
             tooltip: 'Statistics',
             onPressed: () {
