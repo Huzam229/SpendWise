@@ -111,11 +111,6 @@ class _AddEditExpenseScreenState extends ConsumerState<AddEditExpenseScreen> {
       hintText: hint,
       prefixIcon: prefixIcon,
       suffixIcon: suffixIcon,
-      filled: true,
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16),
-        borderSide: BorderSide.none,
-      ),
     );
   }
 
@@ -127,7 +122,13 @@ class _AddEditExpenseScreenState extends ConsumerState<AddEditExpenseScreen> {
       backgroundColor: scheme.surface,
       appBar: AppBar(
         title: Text(widget.isEditing ? 'Edit transaction' : 'Add transaction'),
-        centerTitle: false,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Divider(
+            height: 1,
+            color: scheme.outlineVariant.withValues(alpha: 0.45),
+          ),
+        ),
       ),
       body: SafeArea(
         child: Form(
@@ -264,23 +265,31 @@ class _AddEditExpenseScreenState extends ConsumerState<AddEditExpenseScreen> {
           ),
         ),
       ),
-      bottomNavigationBar: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
-          child: FilledButton.icon(
-            onPressed: _saving ? null : _save,
-            icon: _saving
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.check_rounded),
-            label: Text(widget.isEditing ? 'Save changes' : 'Save transaction'),
-            style: FilledButton.styleFrom(
-              minimumSize: const Size.fromHeight(54),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
+      bottomNavigationBar: Material(
+        color: scheme.surface,
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+            child: FilledButton.icon(
+              onPressed: _saving ? null : _save,
+              icon: _saving
+                  ? SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: scheme.onPrimary,
+                      ),
+                    )
+                  : const Icon(Icons.check_rounded),
+              label: Text(
+                widget.isEditing ? 'Save changes' : 'Save transaction',
+              ),
+              style: FilledButton.styleFrom(
+                minimumSize: const Size.fromHeight(54),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
               ),
             ),
           ),

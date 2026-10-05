@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/models/expense.dart';
 import '../providers/expense_provider.dart';
 import '../providers/filter_provider.dart';
+import '../providers/theme_provider.dart';
 import '../utils/csv_exporter.dart';
 import '../utils/formatters.dart';
 import '../widgets/expense_tile.dart';
@@ -59,6 +60,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       );
   }
 
+  void _toggleTheme() {
+    final current = ref.read(themeModeProvider);
+    final isDark = current == ThemeMode.dark ||
+        (current == ThemeMode.system &&
+            MediaQuery.platformBrightnessOf(context) == Brightness.dark);
+
+    ref.read(themeModeProvider.notifier).state =
+        isDark ? ThemeMode.light : ThemeMode.dark;
+  }
+
   Future<void> _exportCsv() async {
     final items = ref.read(filteredExpensesProvider);
     if (items.isEmpty) {
@@ -84,16 +95,32 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final month = ref.watch(selectedMonthProvider);
     final expensesAsync = ref.watch(expenseProvider);
     final searchText = ref.watch(searchTextProvider);
+    final themeMode = ref.watch(themeModeProvider);
+    final isDark = themeMode == ThemeMode.dark ||
+        (themeMode == ThemeMode.system &&
+            MediaQuery.platformBrightnessOf(context) == Brightness.dark);
 
     return Scaffold(
       backgroundColor: scheme.surface,
       appBar: AppBar(
         title: const Text('SpendWise'),
-        centerTitle: false,
         actions: [
+          IconButton(
+            tooltip: isDark ? 'Switch to light mode' : 'Switch to dark mode',
+            onPressed: _toggleTheme,
+            style: IconButton.styleFrom(
+              foregroundColor: scheme.onSurfaceVariant,
+            ),
+            icon: Icon(
+              isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+            ),
+          ),
           IconButton(
             tooltip: 'Export CSV',
             onPressed: _exportCsv,
+            style: IconButton.styleFrom(
+              foregroundColor: scheme.onSurfaceVariant,
+            ),
             icon: const Icon(Icons.ios_share_rounded),
           ),
           IconButton(
@@ -105,42 +132,47 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ),
               );
             },
+            style: IconButton.styleFrom(
+              foregroundColor: scheme.onSurfaceVariant,
+            ),
             icon: const Icon(Icons.pie_chart_rounded),
           ),
+          const SizedBox(width: 4),
         ],
         bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(64),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-            child: TextField(
-              controller: _searchController,
-              textInputAction: TextInputAction.search,
-              onChanged: (value) {
-                ref.read(searchTextProvider.notifier).state = value;
-              },
-              decoration: InputDecoration(
-                hintText: 'Search title, category, or note',
-                prefixIcon: const Icon(Icons.search_rounded),
-                suffixIcon: searchText.isEmpty
-                    ? null
-                    : IconButton(
-                        tooltip: 'Clear',
-                        onPressed: () {
-                          _searchController.clear();
-                          ref.read(searchTextProvider.notifier).state = '';
-                        },
-                        icon: const Icon(Icons.close_rounded),
-                      ),
-                filled: true,
-                fillColor:
-                    scheme.surfaceContainerHighest.withValues(alpha: 0.55),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  borderSide: BorderSide.none,
+          preferredSize: const Size.fromHeight(68),
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                child: TextField(
+                  controller: _searchController,
+                  textInputAction: TextInputAction.search,
+                  style: TextStyle(color: scheme.onSurface),
+                  onChanged: (value) {
+                    ref.read(searchTextProvider.notifier).state = value;
+                  },
+                  decoration: InputDecoration(
+                    hintText: 'Search title, category, or note',
+                    prefixIcon: const Icon(Icons.search_rounded),
+                    suffixIcon: searchText.isEmpty
+                        ? null
+                        : IconButton(
+                            tooltip: 'Clear',
+                            onPressed: () {
+                              _searchController.clear();
+                              ref.read(searchTextProvider.notifier).state = '';
+                            },
+                            icon: const Icon(Icons.close_rounded),
+                          ),
+                  ),
                 ),
               ),
-            ),
+              Divider(
+                height: 1,
+                color: scheme.outlineVariant.withValues(alpha: 0.45),
+              ),
+            ],
           ),
         ),
       ),
@@ -265,12 +297,16 @@ class _MonthSelector extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
       decoration: BoxDecoration(
-        color: scheme.surfaceContainerHighest.withValues(alpha: 0.55),
+        color: scheme.surfaceContainer,
         borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: scheme.outlineVariant.withValues(alpha: isDark ? 0.35 : 0.55),
+        ),
       ),
       child: Row(
         children: [
@@ -285,6 +321,7 @@ class _MonthSelector extends StatelessWidget {
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w700,
+                    color: scheme.onSurface,
                   ),
             ),
           ),

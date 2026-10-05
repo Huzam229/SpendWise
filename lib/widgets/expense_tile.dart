@@ -18,63 +18,78 @@ class ExpenseTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final category = categoryOf(expense.category);
-    final amountColor =
-        expense.isIncome ? const Color(0xFF2E7D32) : const Color(0xFFC62828);
+    final amountColor = expense.isIncome
+        ? (isDark ? const Color(0xFF81C784) : const Color(0xFF2E7D32))
+        : (isDark ? const Color(0xFFE57373) : const Color(0xFFC62828));
 
     final tile = Material(
-      color: scheme.surfaceContainerLow,
+      color: scheme.surfaceContainer,
       borderRadius: BorderRadius.circular(20),
+      clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(20),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-          child: Row(
-            children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: category.color.withValues(alpha: 0.16),
-                  borderRadius: BorderRadius.circular(16),
+        child: Ink(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: scheme.outlineVariant.withValues(alpha: isDark ? 0.35 : 0.55),
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+            child: Row(
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: category.color.withValues(alpha: isDark ? 0.22 : 0.16),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Icon(category.icon, color: category.color, size: 24),
                 ),
-                child: Icon(category.icon, color: category.color, size: 24),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      expense.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${expense.category} · ${shortDateFormat.format(expense.date)}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: scheme.onSurfaceVariant,
-                          ),
-                    ),
-                  ],
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        expense.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                              color: scheme.onSurface,
+                            ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${expense.category} · ${shortDateFormat.format(expense.date)}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: scheme.onSurfaceVariant,
+                            ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(width: 10),
-              Text(
-                formatSignedAmount(expense.amount, isIncome: expense.isIncome),
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      color: amountColor,
-                      fontWeight: FontWeight.w700,
-                    ),
-              ),
-            ],
+                const SizedBox(width: 10),
+                Text(
+                  formatSignedAmount(
+                    expense.amount,
+                    isIncome: expense.isIncome,
+                  ),
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        color: amountColor,
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -93,7 +108,10 @@ class ExpenseTile extends StatelessWidget {
           color: scheme.errorContainer,
           borderRadius: BorderRadius.circular(20),
         ),
-        child: Icon(Icons.delete_outline_rounded, color: scheme.onErrorContainer),
+        child: Icon(
+          Icons.delete_outline_rounded,
+          color: scheme.onErrorContainer,
+        ),
       ),
       child: tile,
     );

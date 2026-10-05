@@ -37,7 +37,13 @@ class StatsScreen extends ConsumerWidget {
       backgroundColor: scheme.surface,
       appBar: AppBar(
         title: const Text('Statistics'),
-        centerTitle: false,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Divider(
+            height: 1,
+            color: scheme.outlineVariant.withValues(alpha: 0.45),
+          ),
+        ),
       ),
       body: expensesAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -147,8 +153,15 @@ class StatsScreen extends ConsumerWidget {
                       vertical: 12,
                     ),
                     decoration: BoxDecoration(
-                      color: scheme.surfaceContainerLow,
+                      color: scheme.surfaceContainer,
                       borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: scheme.outlineVariant.withValues(
+                          alpha: Theme.of(context).brightness == Brightness.dark
+                              ? 0.35
+                              : 0.55,
+                        ),
+                      ),
                     ),
                     child: Row(
                       children: [
@@ -169,7 +182,10 @@ class StatsScreen extends ConsumerWidget {
                             style: Theme.of(context)
                                 .textTheme
                                 .titleSmall
-                                ?.copyWith(fontWeight: FontWeight.w600),
+                                ?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                  color: scheme.onSurface,
+                                ),
                           ),
                         ),
                         Text(
@@ -185,6 +201,7 @@ class StatsScreen extends ConsumerWidget {
                           style:
                               Theme.of(context).textTheme.titleSmall?.copyWith(
                                     fontWeight: FontWeight.w700,
+                                    color: scheme.onSurface,
                                   ),
                         ),
                       ],
