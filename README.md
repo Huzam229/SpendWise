@@ -20,7 +20,7 @@ Add screenshots under `screenshots/` and link them here:
 
 | Home | Add / Edit | Statistics |
 | --- | --- | --- |
-| ![Home](screenshots/home.png) | ![Add / Edit](screenshots/add_edit.png) | ![Statistics](screenshots/stats.png) |
+| ![Home](screenshots/Home.png) | ![Add / Edit](screenshots/add_edit.png) | ![Statistics](screenshots/stats.png) |
 
 > Tip: run the app, capture device screenshots, and save them as `screenshots/home.png`, `screenshots/add_edit.png`, and `screenshots/stats.png`.
 
