@@ -4,9 +4,14 @@ import 'package:flutter_riverpod/legacy.dart';
 import '../data/models/expense.dart';
 import 'expense_provider.dart';
 
+enum TransactionFilter { all, income, expense }
+
 final selectedMonthProvider = StateProvider<DateTime>((ref) => DateTime.now());
 
 final searchTextProvider = StateProvider<String>((ref) => '');
+
+final transactionFilterProvider =
+    StateProvider<TransactionFilter>((ref) => TransactionFilter.all);
 
 final filteredExpensesProvider = Provider<List<Expense>>((ref) {
   final expenses = ref.watch(expenseProvider).value ?? [];
@@ -21,6 +26,21 @@ final filteredExpensesProvider = Provider<List<Expense>>((ref) {
         e.category.toLowerCase().contains(search) ||
         (e.note?.toLowerCase().contains(search) ?? false);
   }).toList();
+});
+
+/// List view filter (does not affect summary totals).
+final displayedExpensesProvider = Provider<List<Expense>>((ref) {
+  final list = ref.watch(filteredExpensesProvider);
+  final filter = ref.watch(transactionFilterProvider);
+
+  switch (filter) {
+    case TransactionFilter.all:
+      return list;
+    case TransactionFilter.income:
+      return list.where((e) => e.isIncome).toList();
+    case TransactionFilter.expense:
+      return list.where((e) => !e.isIncome).toList();
+  }
 });
 
 final totalIncomeProvider = Provider<double>((ref) {

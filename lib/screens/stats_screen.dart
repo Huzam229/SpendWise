@@ -7,10 +7,20 @@ import '../providers/expense_provider.dart';
 import '../providers/filter_provider.dart';
 import '../utils/formatters.dart';
 
-class StatsScreen extends ConsumerWidget {
+class StatsScreen extends ConsumerStatefulWidget {
   const StatsScreen({super.key});
 
-  Map<String, double> _expensesByCategory(List<Expense> expenses, DateTime month) {
+  @override
+  ConsumerState<StatsScreen> createState() => _StatsScreenState();
+}
+
+class _StatsScreenState extends ConsumerState<StatsScreen> {
+  int? _touchedIndex;
+
+  Map<String, double> _expensesByCategory(
+    List<Expense> expenses,
+    DateTime month,
+  ) {
     final totals = <String, double>{};
 
     for (final expense in expenses) {
@@ -28,7 +38,7 @@ class StatsScreen extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final month = ref.watch(selectedMonthProvider);
     final expensesAsync = ref.watch(expenseProvider);
@@ -88,22 +98,30 @@ class StatsScreen extends ConsumerWidget {
           final entries = byCategory.entries.toList()
             ..sort((a, b) => b.value.compareTo(a.value));
 
-          final sections = entries.map((entry) {
+          final sections = List.generate(entries.length, (index) {
+            final entry = entries[index];
             final category = categoryOf(entry.key);
             final percent = total == 0 ? 0.0 : (entry.value / total) * 100;
+            final isTouched = index == _touchedIndex;
 
             return PieChartSectionData(
               color: category.color,
               value: entry.value,
-              title: percent >= 8 ? '${percent.toStringAsFixed(0)}%' : '',
-              radius: 72,
-              titleStyle: const TextStyle(
+              title: percent >= 8 || isTouched
+                  ? '${percent.toStringAsFixed(0)}%'
+                  : '',
+              radius: isTouched ? 82 : 70,
+              titleStyle: TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.w700,
-                fontSize: 13,
+                fontSize: isTouched ? 15 : 12,
               ),
             );
-          }).toList();
+          });
+
+          final focused = _touchedIndex != null && _touchedIndex! < entries.length
+              ? entries[_touchedIndex!]
+              : null;
 
           return ListView(
             padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
@@ -124,16 +142,64 @@ class StatsScreen extends ConsumerWidget {
               const SizedBox(height: 28),
               AspectRatio(
                 aspectRatio: 1.15,
-                child: PieChart(
-                  PieChartData(
-                    sectionsSpace: 2,
-                    centerSpaceRadius: 48,
-                    sections: sections,
-                    borderData: FlBorderData(show: false),
-                  ),
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    PieChart(
+                      PieChartData(
+                        sectionsSpace: 2,
+                        centerSpaceRadius: 58,
+                        sections: sections,
+                        borderData: FlBorderData(show: false),
+                        pieTouchData: PieTouchData(
+                          touchCallback: (event, response) {
+                            setState(() {
+                              if (!event.isInterestedForInteractions ||
+                                  response == null ||
+                                  response.touchedSection == null) {
+                                _touchedIndex = null;
+                                return;
+                              }
+                              _touchedIndex = response
+                                  .touchedSection!.touchedSectionIndex;
+                            });
+                          },
+                        ),
+                      ),
+                    ),
+                    Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          focused?.key ?? 'Total',
+                          style:
+                              Theme.of(context).textTheme.labelLarge?.copyWith(
+                                    color: scheme.onSurfaceVariant,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          currencyFormat.format(focused?.value ?? total),
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w800),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 28),
+              const SizedBox(height: 8),
+              Text(
+                'Tap a slice for details',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+              ),
+              const SizedBox(height: 24),
               Text(
                 'Legend',
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
@@ -141,26 +207,36 @@ class StatsScreen extends ConsumerWidget {
                     ),
               ),
               const SizedBox(height: 12),
-              ...entries.map((entry) {
+              ...entries.asMap().entries.map((indexed) {
+                final index = indexed.key;
+                final entry = indexed.value;
                 final category = categoryOf(entry.key);
                 final percent = total == 0 ? 0.0 : (entry.value / total) * 100;
+                final isFocused = index == _touchedIndex;
 
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 10),
-                  child: Container(
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
                     padding: const EdgeInsets.symmetric(
                       horizontal: 14,
                       vertical: 12,
                     ),
                     decoration: BoxDecoration(
-                      color: scheme.surfaceContainer,
+                      color: isFocused
+                          ? category.color.withValues(alpha: 0.12)
+                          : scheme.surfaceContainer,
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(
-                        color: scheme.outlineVariant.withValues(
-                          alpha: Theme.of(context).brightness == Brightness.dark
-                              ? 0.35
-                              : 0.55,
-                        ),
+                        color: isFocused
+                            ? category.color.withValues(alpha: 0.45)
+                            : scheme.outlineVariant.withValues(
+                                alpha:
+                                    Theme.of(context).brightness ==
+                                            Brightness.dark
+                                        ? 0.35
+                                        : 0.55,
+                              ),
                       ),
                     ),
                     child: Row(

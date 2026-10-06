@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/models/expense.dart';
@@ -7,8 +8,10 @@ import '../providers/filter_provider.dart';
 import '../providers/theme_provider.dart';
 import '../utils/csv_exporter.dart';
 import '../utils/formatters.dart';
+import '../utils/page_transitions.dart';
 import '../widgets/expense_tile.dart';
 import '../widgets/summary_card.dart';
+import '../widgets/transaction_filter_bar.dart';
 import 'add_edit_expense_screen.dart';
 import 'stats_screen.dart';
 
@@ -21,6 +24,7 @@ class HomeScreen extends ConsumerStatefulWidget {
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   late final TextEditingController _searchController;
+  bool _fabOpen = false;
 
   @override
   void initState() {
@@ -36,12 +40,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   void _shiftMonth(int delta) {
+    HapticFeedback.selectionClick();
     final current = ref.read(selectedMonthProvider);
     ref.read(selectedMonthProvider.notifier).state =
         DateTime(current.year, current.month + delta);
   }
 
+  void _jumpToCurrentMonth() {
+    HapticFeedback.lightImpact();
+    final now = DateTime.now();
+    ref.read(selectedMonthProvider.notifier).state =
+        DateTime(now.year, now.month);
+  }
+
   Future<void> _deleteWithUndo(Expense item) async {
+    HapticFeedback.mediumImpact();
     await ref.read(expenseProvider.notifier).remove(item.id);
     if (!mounted) return;
 
@@ -89,6 +102,26 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
   }
 
+  Future<void> _openAdd({bool? asIncome}) async {
+    setState(() => _fabOpen = false);
+    await Navigator.of(context).push(
+      slideUpRoute(
+        AddEditExpenseScreen(initialIsIncome: asIncome),
+      ),
+    );
+  }
+
+  Future<void> _openEdit(Expense item) async {
+    await Navigator.of(context).push(
+      slideUpRoute(AddEditExpenseScreen(expense: item)),
+    );
+  }
+
+  Future<void> _refresh() async {
+    ref.invalidate(expenseProvider);
+    await ref.read(expenseProvider.future);
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -96,9 +129,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final expensesAsync = ref.watch(expenseProvider);
     final searchText = ref.watch(searchTextProvider);
     final themeMode = ref.watch(themeModeProvider);
+    final filter = ref.watch(transactionFilterProvider);
     final isDark = themeMode == ThemeMode.dark ||
         (themeMode == ThemeMode.system &&
             MediaQuery.platformBrightnessOf(context) == Brightness.dark);
+
+    final now = DateTime.now();
+    final isCurrentMonth = month.year == now.year && month.month == now.month;
 
     return Scaffold(
       backgroundColor: scheme.surface,
@@ -126,11 +163,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           IconButton(
             tooltip: 'Statistics',
             onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => const StatsScreen(),
-                ),
-              );
+              Navigator.of(context).push(slideUpRoute(const StatsScreen()));
             },
             style: IconButton.styleFrom(
               foregroundColor: scheme.onSurfaceVariant,
@@ -176,108 +209,238 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
         ),
       ),
-      body: expensesAsync.when(
-        loading: () => const _LoadingState(),
-        error: (error, _) => _ErrorState(
-          message: error.toString(),
-          onRetry: () => ref.invalidate(expenseProvider),
-        ),
-        data: (_) {
-          final expenses = ref.watch(filteredExpensesProvider);
-          final balance = ref.watch(balanceProvider);
-          final income = ref.watch(totalIncomeProvider);
-          final expenseTotal = ref.watch(totalExpenseProvider);
-
-          return CustomScrollView(
-            physics: const BouncingScrollPhysics(),
-            slivers: [
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-                  child: _MonthSelector(
-                    label: monthYearFormat.format(month),
-                    onPrevious: () => _shiftMonth(-1),
-                    onNext: () => _shiftMonth(1),
-                  ),
-                ),
-              ),
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-                  child: SummaryCard(
-                    balance: balance,
-                    income: income,
-                    expense: expenseTotal,
-                  ),
-                ),
-              ),
-              if (expenses.isEmpty)
-                SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: _EmptyState(hasSearch: searchText.trim().isNotEmpty),
-                )
-              else ...[
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 22, 20, 10),
-                    child: Row(
-                      children: [
-                        Text(
-                          'Transactions',
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleMedium
-                              ?.copyWith(fontWeight: FontWeight.w700),
-                        ),
-                        const Spacer(),
-                        Text(
-                          '${expenses.length}',
-                          style: Theme.of(context)
-                              .textTheme
-                              .labelLarge
-                              ?.copyWith(color: scheme.onSurfaceVariant),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
-                  sliver: SliverList.separated(
-                    itemCount: expenses.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 10),
-                    itemBuilder: (context, index) {
-                      final item = expenses[index];
-                      return ExpenseTile(
-                        expense: item,
-                        onTap: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute<void>(
-                              builder: (_) =>
-                                  AddEditExpenseScreen(expense: item),
-                            ),
-                          );
-                        },
-                        onDismissed: () => _deleteWithUndo(item),
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ],
-          );
-        },
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          Navigator.of(context).push(
-            MaterialPageRoute<void>(
-              builder: (_) => const AddEditExpenseScreen(),
+      body: Stack(
+        children: [
+          expensesAsync.when(
+            loading: () => const _LoadingState(),
+            error: (error, _) => _ErrorState(
+              message: error.toString(),
+              onRetry: () => ref.invalidate(expenseProvider),
             ),
-          );
-        },
-        icon: const Icon(Icons.add_rounded),
-        label: const Text('Add'),
+            data: (_) {
+              final expenses = ref.watch(displayedExpensesProvider);
+              final balance = ref.watch(balanceProvider);
+              final income = ref.watch(totalIncomeProvider);
+              final expenseTotal = ref.watch(totalExpenseProvider);
+
+              return RefreshIndicator(
+                color: scheme.primary,
+                onRefresh: _refresh,
+                child: CustomScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(
+                    parent: BouncingScrollPhysics(),
+                  ),
+                  slivers: [
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                        child: _MonthSelector(
+                          label: monthYearFormat.format(month),
+                          showToday: !isCurrentMonth,
+                          onPrevious: () => _shiftMonth(-1),
+                          onNext: () => _shiftMonth(1),
+                          onToday: _jumpToCurrentMonth,
+                        ),
+                      ),
+                    ),
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                        child: SummaryCard(
+                          balance: balance,
+                          income: income,
+                          expense: expenseTotal,
+                        ),
+                      ),
+                    ),
+                    const SliverToBoxAdapter(
+                      child: Padding(
+                        padding: EdgeInsets.fromLTRB(20, 18, 20, 0),
+                        child: TransactionFilterBar(),
+                      ),
+                    ),
+                    if (expenses.isEmpty)
+                      SliverFillRemaining(
+                        hasScrollBody: false,
+                        child: _EmptyState(
+                          hasSearch: searchText.trim().isNotEmpty,
+                          filter: filter,
+                          onAddIncome: () => _openAdd(asIncome: true),
+                          onAddExpense: () => _openAdd(asIncome: false),
+                        ),
+                      )
+                    else ...[
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
+                          child: Row(
+                            children: [
+                              Text(
+                                'Transactions',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleMedium
+                                    ?.copyWith(fontWeight: FontWeight.w700),
+                              ),
+                              const Spacer(),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: scheme.surfaceContainerHighest
+                                      .withValues(alpha: 0.55),
+                                  borderRadius: BorderRadius.circular(999),
+                                ),
+                                child: Text(
+                                  '${expenses.length}',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .labelLarge
+                                      ?.copyWith(
+                                        color: scheme.onSurfaceVariant,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      SliverPadding(
+                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 110),
+                        sliver: SliverList.separated(
+                          itemCount: expenses.length,
+                          separatorBuilder: (_, _) =>
+                              const SizedBox(height: 10),
+                          itemBuilder: (context, index) {
+                            final item = expenses[index];
+                            return TweenAnimationBuilder<double>(
+                              tween: Tween(begin: 0, end: 1),
+                              duration: Duration(
+                                milliseconds: 220 + (index.clamp(0, 8) * 40),
+                              ),
+                              curve: Curves.easeOutCubic,
+                              builder: (context, value, child) {
+                                return Opacity(
+                                  opacity: value,
+                                  child: Transform.translate(
+                                    offset: Offset(0, 12 * (1 - value)),
+                                    child: child,
+                                  ),
+                                );
+                              },
+                              child: ExpenseTile(
+                                expense: item,
+                                onTap: () => _openEdit(item),
+                                onDismissed: () => _deleteWithUndo(item),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              );
+            },
+          ),
+          if (_fabOpen)
+            Positioned.fill(
+              child: GestureDetector(
+                onTap: () => setState(() => _fabOpen = false),
+                child: AnimatedOpacity(
+                  opacity: _fabOpen ? 1 : 0,
+                  duration: const Duration(milliseconds: 180),
+                  child: ColoredBox(
+                    color: Colors.black.withValues(alpha: 0.28),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          if (_fabOpen) ...[
+            _QuickAddChip(
+              label: 'Add income',
+              icon: Icons.south_west_rounded,
+              color: const Color(0xFF2E7D32),
+              onTap: () => _openAdd(asIncome: true),
+            ),
+            const SizedBox(height: 10),
+            _QuickAddChip(
+              label: 'Add expense',
+              icon: Icons.north_east_rounded,
+              color: const Color(0xFFC62828),
+              onTap: () => _openAdd(asIncome: false),
+            ),
+            const SizedBox(height: 12),
+          ],
+          FloatingActionButton.extended(
+            onPressed: () {
+              HapticFeedback.selectionClick();
+              setState(() => _fabOpen = !_fabOpen);
+            },
+            icon: AnimatedRotation(
+              turns: _fabOpen ? 0.125 : 0,
+              duration: const Duration(milliseconds: 200),
+              child: Icon(_fabOpen ? Icons.close_rounded : Icons.add_rounded),
+            ),
+            label: Text(_fabOpen ? 'Close' : 'Add'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _QuickAddChip extends StatelessWidget {
+  const _QuickAddChip({
+    required this.label,
+    required this.icon,
+    required this.color,
+    required this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return Material(
+      color: scheme.surfaceContainer,
+      elevation: 3,
+      shadowColor: Colors.black26,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, color: color, size: 18),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: scheme.onSurface,
+                    ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -288,11 +451,15 @@ class _MonthSelector extends StatelessWidget {
     required this.label,
     required this.onPrevious,
     required this.onNext,
+    required this.onToday,
+    required this.showToday,
   });
 
   final String label;
   final VoidCallback onPrevious;
   final VoidCallback onNext;
+  final VoidCallback onToday;
+  final bool showToday;
 
   @override
   Widget build(BuildContext context) {
@@ -316,13 +483,28 @@ class _MonthSelector extends StatelessWidget {
             tooltip: 'Previous month',
           ),
           Expanded(
-            child: Text(
-              label,
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    color: scheme.onSurface,
+            child: Column(
+              children: [
+                Text(
+                  label,
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: scheme.onSurface,
+                      ),
+                ),
+                if (showToday)
+                  TextButton(
+                    onPressed: onToday,
+                    style: TextButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                      minimumSize: const Size(0, 24),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: const Text('Jump to this month'),
                   ),
+              ],
             ),
           ),
           IconButton(
@@ -341,13 +523,24 @@ class _LoadingState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Center(
+    final scheme = Theme.of(context).colorScheme;
+
+    return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          CircularProgressIndicator(),
-          SizedBox(height: 16),
-          Text('Loading your expenses...'),
+          SizedBox(
+            width: 42,
+            height: 42,
+            child: CircularProgressIndicator(color: scheme.primary),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Loading your expenses...',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
+          ),
         ],
       ),
     );
@@ -399,13 +592,44 @@ class _ErrorState extends StatelessWidget {
 }
 
 class _EmptyState extends StatelessWidget {
-  const _EmptyState({required this.hasSearch});
+  const _EmptyState({
+    required this.hasSearch,
+    required this.filter,
+    required this.onAddIncome,
+    required this.onAddExpense,
+  });
 
   final bool hasSearch;
+  final TransactionFilter filter;
+  final VoidCallback onAddIncome;
+  final VoidCallback onAddExpense;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+
+    String title;
+    String subtitle;
+    IconData icon;
+
+    if (hasSearch) {
+      title = 'No matches found';
+      subtitle = 'Try a different search term for this month.';
+      icon = Icons.search_off_rounded;
+    } else if (filter == TransactionFilter.income) {
+      title = 'No income yet';
+      subtitle = 'Log a salary or other income to see it here.';
+      icon = Icons.south_west_rounded;
+    } else if (filter == TransactionFilter.expense) {
+      title = 'No expenses yet';
+      subtitle = 'Track a purchase or bill to fill this list.';
+      icon = Icons.north_east_rounded;
+    } else {
+      title = 'No transactions yet';
+      subtitle =
+          'Add your first income or expense to start tracking this month.';
+      icon = Icons.receipt_long_rounded;
+    }
 
     return Padding(
       padding: const EdgeInsets.all(36),
@@ -419,29 +643,43 @@ class _EmptyState extends StatelessWidget {
               color: scheme.primaryContainer.withValues(alpha: 0.55),
               shape: BoxShape.circle,
             ),
-            child: Icon(
-              hasSearch ? Icons.search_off_rounded : Icons.receipt_long_rounded,
-              size: 40,
-              color: scheme.primary,
-            ),
+            child: Icon(icon, size: 40, color: scheme.primary),
           ),
           const SizedBox(height: 18),
           Text(
-            hasSearch ? 'No matches found' : 'No transactions yet',
+            title,
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.w700,
                 ),
           ),
           const SizedBox(height: 8),
           Text(
-            hasSearch
-                ? 'Try a different search term for this month.'
-                : 'Add your first income or expense to start tracking this month.',
+            subtitle,
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: scheme.onSurfaceVariant,
                 ),
           ),
+          if (!hasSearch) ...[
+            const SizedBox(height: 22),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              alignment: WrapAlignment.center,
+              children: [
+                FilledButton.tonalIcon(
+                  onPressed: onAddIncome,
+                  icon: const Icon(Icons.south_west_rounded),
+                  label: const Text('Add income'),
+                ),
+                FilledButton.icon(
+                  onPressed: onAddExpense,
+                  icon: const Icon(Icons.north_east_rounded),
+                  label: const Text('Add expense'),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );

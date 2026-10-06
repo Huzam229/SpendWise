@@ -9,9 +9,14 @@ import '../providers/expense_provider.dart';
 import '../utils/formatters.dart';
 
 class AddEditExpenseScreen extends ConsumerStatefulWidget {
-  const AddEditExpenseScreen({super.key, this.expense});
+  const AddEditExpenseScreen({
+    super.key,
+    this.expense,
+    this.initialIsIncome,
+  });
 
   final Expense? expense;
+  final bool? initialIsIncome;
 
   bool get isEditing => expense != null;
 
@@ -40,7 +45,7 @@ class _AddEditExpenseScreenState extends ConsumerState<AddEditExpenseScreen> {
       text: existing != null ? existing.amount.toString() : '',
     );
     _noteController = TextEditingController(text: existing?.note ?? '');
-    _isIncome = existing?.isIncome ?? false;
+    _isIncome = existing?.isIncome ?? widget.initialIsIncome ?? false;
     _date = existing?.date ?? DateTime.now();
 
     final available = categoriesFor(isIncome: _isIncome);
